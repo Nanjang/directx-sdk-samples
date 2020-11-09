@@ -365,6 +365,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Common\WAVFileReader.h" />
+    <ClInclude Include="..\Common\XAudio2Versions.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

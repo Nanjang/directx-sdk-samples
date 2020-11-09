@@ -42,9 +42,9 @@ struct NormalMapEffectTraits
 {
     using ConstantBufferType = NormalMapEffectConstants;
 
-    static const int VertexShaderCount = 4;
-    static const int PixelShaderCount = 4;
-    static const int ShaderPermutationCount = 16;
+    static constexpr int VertexShaderCount = 4;
+    static constexpr int PixelShaderCount = 4;
+    static constexpr int ShaderPermutationCount = 16;
 };
 
 
@@ -62,7 +62,7 @@ public:
   
     EffectLights lights;
 
-    int GetCurrentShaderPermutation() const;
+    int GetCurrentShaderPermutation() const noexcept;
 
     void Apply(_In_ ID3D11DeviceContext* deviceContext);
 };
@@ -170,7 +170,7 @@ const int EffectBase<NormalMapEffectTraits>::PixelShaderIndices[] =
 
 // Global pool of per-device NormalMapEffect resources.
 template<>
-SharedResourcePool<ID3D11Device*, EffectBase<NormalMapEffectTraits>::DeviceResources> EffectBase<NormalMapEffectTraits>::deviceResourcesPool;
+SharedResourcePool<ID3D11Device*, EffectBase<NormalMapEffectTraits>::DeviceResources> EffectBase<NormalMapEffectTraits>::deviceResourcesPool = {};
 
 
 // Constructor.
@@ -193,7 +193,7 @@ NormalMapEffect::Impl::Impl(_In_ ID3D11Device* device)
 }
 
 
-int NormalMapEffect::Impl::GetCurrentShaderPermutation() const
+int NormalMapEffect::Impl::GetCurrentShaderPermutation() const noexcept
 {
     int permutation = 0;
 

@@ -31,9 +31,9 @@ struct DualTextureEffectTraits
 {
     using ConstantBufferType = DualTextureEffectConstants;
 
-    static const int VertexShaderCount = 4;
-    static const int PixelShaderCount = 2;
-    static const int ShaderPermutationCount = 4;
+    static constexpr int VertexShaderCount = 4;
+    static constexpr int PixelShaderCount = 2;
+    static constexpr int ShaderPermutationCount = 4;
 };
 
 
@@ -49,7 +49,7 @@ public:
 
     ComPtr<ID3D11ShaderResourceView> texture2;
 
-    int GetCurrentShaderPermutation() const;
+    int GetCurrentShaderPermutation() const noexcept;
 
     void Apply(_In_ ID3D11DeviceContext* deviceContext);
 };
@@ -120,7 +120,7 @@ const int EffectBase<DualTextureEffectTraits>::PixelShaderIndices[] =
 
 // Global pool of per-device DualTextureEffect resources.
 template<>
-SharedResourcePool<ID3D11Device*, EffectBase<DualTextureEffectTraits>::DeviceResources> EffectBase<DualTextureEffectTraits>::deviceResourcesPool;
+SharedResourcePool<ID3D11Device*, EffectBase<DualTextureEffectTraits>::DeviceResources> EffectBase<DualTextureEffectTraits>::deviceResourcesPool = {};
 
 
 // Constructor.
@@ -135,7 +135,7 @@ DualTextureEffect::Impl::Impl(_In_ ID3D11Device* device)
 }
 
 
-int DualTextureEffect::Impl::GetCurrentShaderPermutation() const
+int DualTextureEffect::Impl::GetCurrentShaderPermutation() const noexcept
 {
     int permutation = 0;
 

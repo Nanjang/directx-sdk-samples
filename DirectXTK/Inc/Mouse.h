@@ -16,6 +16,11 @@
 namespace ABI { namespace Windows { namespace UI { namespace Core { struct ICoreWindow; } } } }
 #endif
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunknown-pragmas"
+#endif
+
 
 namespace DirectX
 {
@@ -70,11 +75,11 @@ namespace DirectX
             #pragma prefast(suppress: 26495, "Reset() performs the initialization")
             ButtonStateTracker() noexcept { Reset(); }
 
-            void __cdecl Update(const State& state);
+            void __cdecl Update(const State& state) noexcept;
 
             void __cdecl Reset() noexcept;
 
-            State __cdecl GetLastState() const { return lastState; }
+            State __cdecl GetLastState() const noexcept { return lastState; }
 
         private:
             State lastState;
@@ -84,7 +89,7 @@ namespace DirectX
         State __cdecl GetState() const;
 
         // Resets the accumulated scroll wheel value
-        void __cdecl ResetScrollWheelValue();
+        void __cdecl ResetScrollWheelValue() noexcept;
 
         // Sets mouse mode (defaults to absolute)
         void __cdecl SetMode(Mode mode);
@@ -96,7 +101,7 @@ namespace DirectX
         bool __cdecl IsVisible() const;
         void __cdecl SetVisible(bool visible);
 
-    #if !defined(WINAPI_FAMILY) || (WINAPI_FAMILY == WINAPI_FAMILY_DESKTOP_APP) && defined(WM_USER)
+    #if (!defined(WINAPI_FAMILY) || (WINAPI_FAMILY == WINAPI_FAMILY_DESKTOP_APP)) && defined(WM_USER)
         void __cdecl SetWindow(HWND window);
         static void __cdecl ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam);
     #endif
@@ -110,8 +115,16 @@ namespace DirectX
             SetWindow(reinterpret_cast<ABI::Windows::UI::Core::ICoreWindow*>(window));
         }
     #endif
-        static void __cdecl SetDpi(float dpi);
+    #ifdef CPPWINRT_VERSION
+        void __cdecl SetWindow(winrt::Windows::UI::Core::CoreWindow window)
+        {
+            // See https://docs.microsoft.com/en-us/windows/uwp/cpp-and-winrt-apis/interop-winrt-abi
+            SetWindow(reinterpret_cast<ABI::Windows::UI::Core::ICoreWindow*>(winrt::get_abi(window)));
+        }
     #endif
+
+        static void __cdecl SetDpi(float dpi);
+    #endif // WINAPI_FAMILY == WINAPI_FAMILY_APP
 
         // Singleton
         static Mouse& __cdecl Get();
@@ -123,3 +136,7 @@ namespace DirectX
         std::unique_ptr<Impl> pImpl;
     };
 }
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif

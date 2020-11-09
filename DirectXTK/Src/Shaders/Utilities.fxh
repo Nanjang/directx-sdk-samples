@@ -17,7 +17,7 @@ float3 BiasD2(float3 x)
 }
 
 
-// Christian Schüler, "Normal Mapping without Precomputed Tangents", ShaderX 5, Chapter 2.6, pp. 131 – 140
+// Christian Schuler, "Normal Mapping without Precomputed Tangents", ShaderX 5, Chapter 2.6, pp. 131-140
 // See also follow-up blog post: http://www.thetenthplanet.de/archives/1180
 float3x3 CalculateTBN(float3 p, float3 n, float2 tex)
 {
@@ -37,6 +37,13 @@ float3 PeturbNormal(float3 localNormal, float3 position, float3 normal, float2 t
 {
     const float3x3 TBN = CalculateTBN(position, normal, texCoord);
     return normalize(mul(localNormal, TBN));
+}
+
+float3 TwoChannelNormalX2(float2 normal)
+{
+    float2 xy = 2.0f * normal - 1.0f;
+    float z = sqrt(1 - dot(xy, xy));
+    return float3(xy.x, xy.y, z);
 }
 
 

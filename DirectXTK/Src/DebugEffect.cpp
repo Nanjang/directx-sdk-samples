@@ -12,31 +12,32 @@
 
 using namespace DirectX;
 
-
-// Constant buffer layout. Must match the shader!
-struct DebugEffectConstants
+namespace
 {
-    XMVECTOR ambientDownAndAlpha;
-    XMVECTOR ambientRange;
-    
-    XMMATRIX world;
-    XMVECTOR worldInverseTranspose[3];
-    XMMATRIX worldViewProj;
-};
+    // Constant buffer layout. Must match the shader!
+    struct DebugEffectConstants
+    {
+        XMVECTOR ambientDownAndAlpha;
+        XMVECTOR ambientRange;
 
-static_assert((sizeof(DebugEffectConstants) % 16) == 0, "CB size not padded correctly");
+        XMMATRIX world;
+        XMVECTOR worldInverseTranspose[3];
+        XMMATRIX worldViewProj;
+    };
+
+    static_assert((sizeof(DebugEffectConstants) % 16) == 0, "CB size not padded correctly");
 
 
-// Traits type describes our characteristics to the EffectBase template.
-struct DebugEffectTraits
-{
-    using ConstantBufferType = DebugEffectConstants;
+    // Traits type describes our characteristics to the EffectBase template.
+    struct DebugEffectTraits
+    {
+        using ConstantBufferType = DebugEffectConstants;
 
-    static const int VertexShaderCount = 4;
-    static const int PixelShaderCount = 4;
-    static const int ShaderPermutationCount = 16;
-};
-
+        static constexpr int VertexShaderCount = 4;
+        static constexpr int PixelShaderCount = 4;
+        static constexpr int ShaderPermutationCount = 16;
+    };
+}
 
 // Internal DebugEffect implementation class.
 class DebugEffect::Impl : public EffectBase<DebugEffectTraits>
@@ -48,7 +49,7 @@ public:
     bool biasedVertexNormals;
     DebugEffect::Mode debugMode;
 
-    int GetCurrentShaderPermutation() const;
+    int GetCurrentShaderPermutation() const noexcept;
 
     void Apply(_In_ ID3D11DeviceContext* deviceContext);
 };
@@ -156,12 +157,12 @@ const int EffectBase<DebugEffectTraits>::PixelShaderIndices[] =
 
 // Global pool of per-deviceDebugEffect resources.
 template<>
-SharedResourcePool<ID3D11Device*, EffectBase<DebugEffectTraits>::DeviceResources> EffectBase<DebugEffectTraits>::deviceResourcesPool;
+SharedResourcePool<ID3D11Device*, EffectBase<DebugEffectTraits>::DeviceResources> EffectBase<DebugEffectTraits>::deviceResourcesPool = {};
 
 
 // Constructor.
 DebugEffect::Impl::Impl(_In_ ID3D11Device* device)
-  : EffectBase(device),
+    : EffectBase(device),
     vertexColorEnabled(false),
     biasedVertexNormals(false),
     debugMode(DebugEffect::Mode_Default)
@@ -183,7 +184,7 @@ DebugEffect::Impl::Impl(_In_ ID3D11Device* device)
 }
 
 
-int DebugEffect::Impl::GetCurrentShaderPermutation() const
+int DebugEffect::Impl::GetCurrentShaderPermutation() const noexcept
 {
     int permutation = static_cast<int>(debugMode);
 
@@ -231,14 +232,14 @@ void DebugEffect::Impl::Apply(_In_ ID3D11DeviceContext* deviceContext)
 
 // Public constructor.
 DebugEffect::DebugEffect(_In_ ID3D11Device* device)
-  : pImpl(std::make_unique<Impl>(device))
+    : pImpl(std::make_unique<Impl>(device))
 {
 }
 
 
 // Move constructor.
 DebugEffect::DebugEffect(DebugEffect&& moveFrom) noexcept
-  : pImpl(std::move(moveFrom.pImpl))
+    : pImpl(std::move(moveFrom.pImpl))
 {
 }
 

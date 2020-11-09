@@ -9,12 +9,11 @@
 
 #include "pch.h"
 #include "PostProcess.h"
-
-#include "AlignedNew.h"
+#include "BufferHelpers.h"
 #include "CommonStates.h"
-#include "ConstantBuffer.h"
-#include "DemandCreate.h"
 #include "DirectXHelpers.h"
+#include "AlignedNew.h"
+#include "DemandCreate.h"
 #include "SharedResourcePool.h"
 
 using namespace DirectX;
@@ -23,15 +22,15 @@ using Microsoft::WRL::ComPtr;
 
 namespace
 {
-    const int Dirty_ConstantBuffer  = 0x01;
-    const int Dirty_Parameters      = 0x02;
+    const constexpr int Dirty_ConstantBuffer  = 0x01;
+    const constexpr int Dirty_Parameters      = 0x02;
 
 #if defined(_XBOX_ONE) && defined(_TITLE)
-    const int PixelShaderCount = 15;
-    const int ShaderPermutationCount = 24;
+    const constexpr int PixelShaderCount = 15;
+    const constexpr int ShaderPermutationCount = 24;
 #else
-    const int PixelShaderCount = 9;
-    const int ShaderPermutationCount = 12;
+    const constexpr int PixelShaderCount = 9;
+    const constexpr int ShaderPermutationCount = 12;
 #endif
 
     // Constant buffer layout. Must match the shader!
@@ -220,9 +219,9 @@ public:
 
     void Process(_In_ ID3D11DeviceContext* deviceContext, std::function<void __cdecl()>& setCustomState);
 
-    void SetDirtyFlag() { mDirtyFlags = INT_MAX; }
+    void SetDirtyFlag() noexcept { mDirtyFlags = INT_MAX; }
 
-    int GetCurrentShaderPermutation() const;
+    int GetCurrentShaderPermutation() const noexcept;
 
     // Fields.
     ToneMapConstants                        constants;
@@ -266,11 +265,15 @@ ToneMapPostProcess::Impl::Impl(_In_ ID3D11Device* device)
     {
         throw std::exception("ToneMapPostProcess requires Feature Level 10.0 or later");
     }
+
+    SetDebugObjectName(mConstantBuffer.GetBuffer(), "ToneMapPostProcess");
 }
 
 
 // Sets our state onto the D3D device.
-void ToneMapPostProcess::Impl::Process(_In_ ID3D11DeviceContext* deviceContext, std::function<void __cdecl()>& setCustomState)
+void ToneMapPostProcess::Impl::Process(
+    _In_ ID3D11DeviceContext* deviceContext,
+    std::function<void __cdecl()>& setCustomState)
 {
     // Set the texture.
     ID3D11ShaderResourceView* textures[1] = { hdrTexture.Get() };
@@ -336,7 +339,7 @@ void ToneMapPostProcess::Impl::Process(_In_ ID3D11DeviceContext* deviceContext, 
 }
 
 
-int ToneMapPostProcess::Impl::GetCurrentShaderPermutation() const
+int ToneMapPostProcess::Impl::GetCurrentShaderPermutation() const noexcept
 {
 #if defined(_XBOX_ONE) && defined(_TITLE)
     int permutation = (mrt) ? 12 : 0;
@@ -376,7 +379,9 @@ ToneMapPostProcess::~ToneMapPostProcess()
 
 
 // IPostProcess methods.
-void ToneMapPostProcess::Process(_In_ ID3D11DeviceContext* deviceContext, _In_opt_ std::function<void __cdecl()> setCustomState)
+void ToneMapPostProcess::Process(
+    _In_ ID3D11DeviceContext* deviceContext,
+    _In_opt_ std::function<void __cdecl()> setCustomState)
 {
     pImpl->Process(deviceContext, setCustomState);
 }
@@ -385,7 +390,7 @@ void ToneMapPostProcess::Process(_In_ ID3D11DeviceContext* deviceContext, _In_op
 // Shader control.
 void ToneMapPostProcess::SetOperator(Operator op)
 {
-    if (op < 0 || op >= Operator_Max)
+    if (op >= Operator_Max)
         throw std::out_of_range("Tonemap operator not defined");
 
     pImpl->op = op;
@@ -394,7 +399,7 @@ void ToneMapPostProcess::SetOperator(Operator op)
 
 void ToneMapPostProcess::SetTransferFunction(TransferFunction func)
 {
-    if (func < 0 || func >= TransferFunction_Max)
+    if (func >= TransferFunction_Max)
         throw std::out_of_range("Electro-optical transfer function not defined");
 
     pImpl->func = func;

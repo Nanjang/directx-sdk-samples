@@ -42,8 +42,8 @@ public:
     void CreatePixelShader(_In_z_ const wchar_t* shader, _Outptr_ ID3D11PixelShader** pixelShader);
 
     void ReleaseCache();
-    void SetSharing(bool enabled) { mSharing = enabled; }
-    void EnableForceSRGB(bool forceSRGB) { mForceSRGB = forceSRGB; }
+    void SetSharing(bool enabled) noexcept { mSharing = enabled; }
+    void EnableForceSRGB(bool forceSRGB) noexcept { mForceSRGB = forceSRGB; }
 
     static SharedResourcePool<ID3D11Device*, Impl> instancePool;
 
@@ -52,9 +52,9 @@ public:
     ComPtr<ID3D11Device> mDevice;
 
 private:
-    typedef std::map< std::wstring, std::shared_ptr<IEffect> > EffectCache;
-    typedef std::map< std::wstring, ComPtr<ID3D11ShaderResourceView> > TextureCache;
-    typedef std::map< std::wstring, ComPtr<ID3D11PixelShader> > ShaderCache;
+    using EffectCache = std::map< std::wstring, std::shared_ptr<IEffect> >;
+    using TextureCache = std::map< std::wstring, ComPtr<ID3D11ShaderResourceView> >;
+    using ShaderCache = std::map< std::wstring, ComPtr<ID3D11PixelShader> >;
 
     EffectCache  mEffectCache;
     EffectCache  mEffectCacheSkinning;
@@ -155,7 +155,7 @@ std::shared_ptr<IEffect> DGSLEffectFactory::Impl::CreateEffect(DGSLEffectFactory
         }
     }
 
-    return effect;
+    return std::move(effect);
 }
 
 
@@ -310,6 +310,16 @@ std::shared_ptr<IEffect> DGSLEffectFactory::Impl::CreateDGSLEffect(DGSLEffectFac
         effect->SetTextureEnabled(true);
     }
 
+    if (info.emissiveTexture && *info.emissiveTexture)
+    {
+        ComPtr<ID3D11ShaderResourceView> srv;
+
+        factory->CreateTexture(info.emissiveTexture, deviceContext, srv.GetAddressOf());
+
+        effect->SetTexture(3, srv.Get());
+        effect->SetTextureEnabled(true);
+    }
+
     for (size_t j = 0; j < _countof(info.textures); ++j)
     {
         if (info.textures[j] && *info.textures[j])
@@ -337,7 +347,7 @@ std::shared_ptr<IEffect> DGSLEffectFactory::Impl::CreateDGSLEffect(DGSLEffectFac
         }
     }
 
-    return effect;
+    return std::move(effect);
 }
 
 
@@ -388,7 +398,8 @@ void DGSLEffectFactory::Impl::CreateTexture(const wchar_t* name, ID3D11DeviceCon
                 mForceSRGB, nullptr, textureView);
             if (FAILED(hr))
             {
-                DebugTrace("ERROR: CreateDDSTextureFromFile failed (%08X) for '%ls'\n", hr, fullName);
+                DebugTrace("ERROR: CreateDDSTextureFromFile failed (%08X) for '%ls'\n",
+                    static_cast<unsigned int>(hr), fullName);
                 throw std::exception("CreateDDSTextureFromFile");
             }
         }
@@ -402,7 +413,8 @@ void DGSLEffectFactory::Impl::CreateTexture(const wchar_t* name, ID3D11DeviceCon
                 mForceSRGB ? WIC_LOADER_FORCE_SRGB : WIC_LOADER_DEFAULT, nullptr, textureView);
             if (FAILED(hr))
             {
-                DebugTrace("ERROR: CreateWICTextureFromFile failed (%08X) for '%ls'\n", hr, fullName);
+                DebugTrace("ERROR: CreateWICTextureFromFile failed (%08X) for '%ls'\n",
+                    static_cast<unsigned int>(hr), fullName);
                 throw std::exception("CreateWICTextureFromFile");
             }
         }
@@ -415,7 +427,8 @@ void DGSLEffectFactory::Impl::CreateTexture(const wchar_t* name, ID3D11DeviceCon
                 mForceSRGB ? WIC_LOADER_FORCE_SRGB : WIC_LOADER_DEFAULT, nullptr, textureView);
             if (FAILED(hr))
             {
-                DebugTrace("ERROR: CreateWICTextureFromFile failed (%08X) for '%ls'\n", hr, fullName);
+                DebugTrace("ERROR: CreateWICTextureFromFile failed (%08X) for '%ls'\n",
+                    static_cast<unsigned int>(hr), fullName);
                 throw std::exception("CreateWICTextureFromFile");
             }
         }
@@ -467,14 +480,16 @@ void DGSLEffectFactory::Impl::CreatePixelShader(const wchar_t* name, ID3D11Pixel
         HRESULT hr = BinaryReader::ReadEntireFile(fullName, data, &dataSize);
         if (FAILED(hr))
         {
-            DebugTrace("ERROR: CreatePixelShader failed (%08X) to load shader file '%ls'\n", hr, fullName);
+            DebugTrace("ERROR: CreatePixelShader failed (%08X) to load shader file '%ls'\n",
+                static_cast<unsigned int>(hr), fullName);
             throw std::exception("CreatePixelShader");
         }
 
         ThrowIfFailed(
             mDevice->CreatePixelShader(data.get(), dataSize, nullptr, pixelShader));
 
-        _Analysis_assume_(*pixelShader != 0);
+        assert(pixelShader != nullptr && *pixelShader != nullptr);
+        _Analysis_assume_(pixelShader != nullptr && *pixelShader != nullptr);
 
         if (mSharing && *name && it == mShaderCache.end())
         {
@@ -558,17 +573,17 @@ void DGSLEffectFactory::ReleaseCache()
     pImpl->ReleaseCache();
 }
 
-void DGSLEffectFactory::SetSharing(bool enabled)
+void DGSLEffectFactory::SetSharing(bool enabled) noexcept
 {
     pImpl->SetSharing(enabled);
 }
 
-void DGSLEffectFactory::EnableForceSRGB(bool forceSRGB)
+void DGSLEffectFactory::EnableForceSRGB(bool forceSRGB) noexcept
 {
     pImpl->EnableForceSRGB(forceSRGB);
 }
 
-void DGSLEffectFactory::SetDirectory(_In_opt_z_ const wchar_t* path)
+void DGSLEffectFactory::SetDirectory(_In_opt_z_ const wchar_t* path) noexcept
 {
     if (path && *path != 0)
     {
@@ -588,7 +603,7 @@ void DGSLEffectFactory::SetDirectory(_In_opt_z_ const wchar_t* path)
         *pImpl->mPath = 0;
 }
 
-ID3D11Device* DGSLEffectFactory::GetDevice() const
+ID3D11Device* DGSLEffectFactory::GetDevice() const noexcept
 {
     return pImpl->mDevice.Get();
 }

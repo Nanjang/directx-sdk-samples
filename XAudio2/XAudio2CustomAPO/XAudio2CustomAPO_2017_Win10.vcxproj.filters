@@ -12,4 +12,7 @@
     <ClInclude Include="..\Common\WAVFileReader.h" />
     <ClInclude Include="SampleAPOBase.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\Common\XAudio2Versions.h" />
+  </ItemGroup>
 </Project>

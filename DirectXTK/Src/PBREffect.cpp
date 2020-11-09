@@ -44,10 +44,10 @@ struct PBREffectTraits
 {
     using ConstantBufferType = PBREffectConstants;
 
-    static const int VertexShaderCount = 4;
-    static const int PixelShaderCount = 5;
-    static const int ShaderPermutationCount = 10;
-    static const int RootSignatureCount = 1;
+    static constexpr int VertexShaderCount = 4;
+    static constexpr int PixelShaderCount = 5;
+    static constexpr int ShaderPermutationCount = 10;
+    static constexpr int RootSignatureCount = 1;
 };
 
 
@@ -70,7 +70,7 @@ public:
 
     XMVECTOR lightColor[MaxDirectionalLights];
 
-    int GetCurrentShaderPermutation() const;
+    int GetCurrentShaderPermutation() const noexcept;
 
     void Apply(_In_ ID3D11DeviceContext* deviceContext);
 };
@@ -161,7 +161,7 @@ const int EffectBase<PBREffectTraits>::PixelShaderIndices[] =
 
 // Global pool of per-device PBREffect resources. Required by EffectBase<>, but not used.
 template<>
-SharedResourcePool<ID3D11Device*, EffectBase<PBREffectTraits>::DeviceResources> EffectBase<PBREffectTraits>::deviceResourcesPool;
+SharedResourcePool<ID3D11Device*, EffectBase<PBREffectTraits>::DeviceResources> EffectBase<PBREffectTraits>::deviceResourcesPool = {};
 
 // Constructor.
 PBREffect::Impl::Impl(_In_ ID3D11Device* device)
@@ -197,7 +197,7 @@ PBREffect::Impl::Impl(_In_ ID3D11Device* device)
 }
 
 
-int PBREffect::Impl::GetCurrentShaderPermutation() const
+int PBREffect::Impl::GetCurrentShaderPermutation() const noexcept
 {
     int permutation = 0;
 
@@ -462,6 +462,29 @@ void PBREffect::SetConstantRoughness(float value)
 
 
 // Texture settings.
+void PBREffect::SetAlbedoTexture(_In_opt_ ID3D11ShaderResourceView* value)
+{
+    pImpl->albedoTexture = value;
+}
+
+
+void PBREffect::SetNormalTexture(_In_opt_ ID3D11ShaderResourceView* value)
+{
+    pImpl->normalTexture = value;
+}
+
+
+void PBREffect::SetRMATexture(_In_opt_ ID3D11ShaderResourceView* value)
+{
+    pImpl->rmaTexture = value;
+}
+
+void PBREffect::SetEmissiveTexture(_In_opt_ ID3D11ShaderResourceView* value)
+{
+    pImpl->emissiveTexture = value;
+}
+
+
 void PBREffect::SetSurfaceTextures(
     _In_opt_ ID3D11ShaderResourceView* albedo,
     _In_opt_ ID3D11ShaderResourceView* normal,
@@ -483,12 +506,6 @@ void PBREffect::SetIBLTextures(
 
     pImpl->constants.numRadianceMipLevels = numRadianceMips;
     pImpl->dirtyFlags |= EffectDirtyFlags::ConstantBuffer;
-}
-
-
-void PBREffect::SetEmissiveTexture(_In_opt_ ID3D11ShaderResourceView* emissive)
-{
-    pImpl->emissiveTexture = emissive;
 }
 
 

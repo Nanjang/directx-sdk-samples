@@ -12,30 +12,31 @@
 
 using namespace DirectX;
 
-
-// Constant buffer layout. Must match the shader!
-struct AlphaTestEffectConstants
+namespace
 {
-    XMVECTOR diffuseColor;
-    XMVECTOR alphaTest;
-    XMVECTOR fogColor;
-    XMVECTOR fogVector;
-    XMMATRIX worldViewProj;
-};
+    // Constant buffer layout. Must match the shader!
+    struct AlphaTestEffectConstants
+    {
+        XMVECTOR diffuseColor;
+        XMVECTOR alphaTest;
+        XMVECTOR fogColor;
+        XMVECTOR fogVector;
+        XMMATRIX worldViewProj;
+    };
 
-static_assert((sizeof(AlphaTestEffectConstants) % 16) == 0, "CB size not padded correctly");
+    static_assert((sizeof(AlphaTestEffectConstants) % 16) == 0, "CB size not padded correctly");
 
 
-// Traits type describes our characteristics to the EffectBase template.
-struct AlphaTestEffectTraits
-{
-    using ConstantBufferType = AlphaTestEffectConstants;
+    // Traits type describes our characteristics to the EffectBase template.
+    struct AlphaTestEffectTraits
+    {
+        using ConstantBufferType = AlphaTestEffectConstants;
 
-    static const int VertexShaderCount = 4;
-    static const int PixelShaderCount = 4;
-    static const int ShaderPermutationCount = 8;
-};
-
+        static constexpr int VertexShaderCount = 4;
+        static constexpr int PixelShaderCount = 4;
+        static constexpr int ShaderPermutationCount = 8;
+    };
+}
 
 // Internal AlphaTestEffect implementation class.
 class AlphaTestEffect::Impl : public EffectBase<AlphaTestEffectTraits>
@@ -50,7 +51,7 @@ public:
 
     EffectColor color;
 
-    int GetCurrentShaderPermutation() const;
+    int GetCurrentShaderPermutation() const noexcept;
 
     void Apply(_In_ ID3D11DeviceContext* deviceContext);
 };
@@ -135,12 +136,12 @@ const int EffectBase<AlphaTestEffectTraits>::PixelShaderIndices[] =
 
 // Global pool of per-device AlphaTestEffect resources.
 template<>
-SharedResourcePool<ID3D11Device*, EffectBase<AlphaTestEffectTraits>::DeviceResources> EffectBase<AlphaTestEffectTraits>::deviceResourcesPool;
+SharedResourcePool<ID3D11Device*, EffectBase<AlphaTestEffectTraits>::DeviceResources> EffectBase<AlphaTestEffectTraits>::deviceResourcesPool = {};
 
 
 // Constructor.
 AlphaTestEffect::Impl::Impl(_In_ ID3D11Device* device)
-  : EffectBase(device),
+    : EffectBase(device),
     alphaFunction(D3D11_COMPARISON_GREATER),
     referenceAlpha(0),
     vertexColorEnabled(false)
@@ -152,7 +153,7 @@ AlphaTestEffect::Impl::Impl(_In_ ID3D11Device* device)
 }
 
 
-int AlphaTestEffect::Impl::GetCurrentShaderPermutation() const
+int AlphaTestEffect::Impl::GetCurrentShaderPermutation() const noexcept
 {
     int permutation = 0;
 
@@ -280,14 +281,14 @@ void AlphaTestEffect::Impl::Apply(_In_ ID3D11DeviceContext* deviceContext)
 
 // Public constructor.
 AlphaTestEffect::AlphaTestEffect(_In_ ID3D11Device* device)
-  : pImpl(std::make_unique<Impl>(device))
+    : pImpl(std::make_unique<Impl>(device))
 {
 }
 
 
 // Move constructor.
 AlphaTestEffect::AlphaTestEffect(AlphaTestEffect&& moveFrom) noexcept
-  : pImpl(std::move(moveFrom.pImpl))
+    : pImpl(std::move(moveFrom.pImpl))
 {
 }
 

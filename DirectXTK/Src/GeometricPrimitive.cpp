@@ -9,72 +9,15 @@
 
 #include "pch.h"
 #include "GeometricPrimitive.h"
-#include "Effects.h"
+#include "BufferHelpers.h"
 #include "CommonStates.h"
 #include "DirectXHelpers.h"
-#include "SharedResourcePool.h"
+#include "Effects.h"
 #include "Geometry.h"
+#include "SharedResourcePool.h"
 
 using namespace DirectX;
 using Microsoft::WRL::ComPtr;
-
-
-namespace
-{
-    // Helper for creating a D3D vertex or index buffer.
-    template<typename T>
-    void CreateBuffer(_In_ ID3D11Device* device, T const& data, D3D11_BIND_FLAG bindFlags, _Outptr_ ID3D11Buffer** pBuffer)
-    {
-        assert(pBuffer != nullptr);
-
-        uint64_t sizeInBytes = uint64_t(data.size()) * sizeof(typename T::value_type);
-
-        if (sizeInBytes > uint64_t(D3D11_REQ_RESOURCE_SIZE_IN_MEGABYTES_EXPRESSION_A_TERM * 1024u * 1024u))
-            throw std::exception("Buffer too large for DirectX 11");
-
-        D3D11_BUFFER_DESC bufferDesc = {};
-
-        bufferDesc.ByteWidth = static_cast<UINT>(sizeInBytes);
-        bufferDesc.BindFlags = bindFlags;
-        bufferDesc.Usage = D3D11_USAGE_DEFAULT;
-
-        D3D11_SUBRESOURCE_DATA dataDesc = {};
-
-        dataDesc.pSysMem = data.data();
-
-        ThrowIfFailed(
-            device->CreateBuffer(&bufferDesc, &dataDesc, pBuffer)
-        );
-
-        _Analysis_assume_(*pBuffer != 0);
-
-        SetDebugObjectName(*pBuffer, "DirectXTK:GeometricPrimitive");
-    }
-
-
-    // Helper for creating a D3D input layout.
-    void CreateInputLayout(_In_ ID3D11Device* device, IEffect* effect, _Outptr_ ID3D11InputLayout** pInputLayout)
-    {
-        assert(pInputLayout != nullptr);
-
-        void const* shaderByteCode;
-        size_t byteCodeLength;
-
-        effect->GetVertexShaderBytecode(&shaderByteCode, &byteCodeLength);
-
-        ThrowIfFailed(
-            device->CreateInputLayout(
-            GeometricPrimitive::VertexType::InputElements,
-            GeometricPrimitive::VertexType::InputElementCount,
-            shaderByteCode, byteCodeLength,
-            pInputLayout)
-        );
-
-        _Analysis_assume_(*pInputLayout != 0);
-
-        SetDebugObjectName(*pInputLayout, "DirectXTK:GeometricPrimitive");
-    }
-}
 
 
 // Internal GeometricPrimitive implementation class.
@@ -85,9 +28,16 @@ public:
 
     void Initialize(_In_ ID3D11DeviceContext* deviceContext, const VertexCollection& vertices, const IndexCollection& indices);
 
-    void XM_CALLCONV Draw(FXMMATRIX world, CXMMATRIX view, CXMMATRIX projection, FXMVECTOR color, _In_opt_ ID3D11ShaderResourceView* texture, bool wireframe, std::function<void()>& setCustomState) const;
+    void XM_CALLCONV Draw(FXMMATRIX world, CXMMATRIX view, CXMMATRIX projection,
+        FXMVECTOR color,
+        _In_opt_ ID3D11ShaderResourceView* texture,
+        bool wireframe,
+        std::function<void()>& setCustomState) const;
 
-    void Draw(_In_ IEffect* effect, _In_ ID3D11InputLayout* inputLayout, bool alpha, bool wireframe, std::function<void()>& setCustomState) const;
+    void Draw(_In_ IEffect* effect,
+        _In_ ID3D11InputLayout* inputLayout,
+        bool alpha, bool wireframe,
+        std::function<void()>& setCustomState) const;
 
     void CreateInputLayout(_In_ IEffect* effect, _Outptr_ ID3D11InputLayout** inputLayout) const;
 
@@ -105,7 +55,7 @@ private:
 
         void PrepareForRendering(bool alpha, bool wireframe) const;
 
-        ComPtr<ID3D11DeviceContext> deviceContext;
+        ComPtr<ID3D11DeviceContext> mDeviceContext;
         std::unique_ptr<BasicEffect> effect;
 
         ComPtr<ID3D11InputLayout> inputLayoutTextured;
@@ -128,7 +78,7 @@ SharedResourcePool<ID3D11DeviceContext*, GeometricPrimitive::Impl::SharedResourc
 
 // Per-device-context constructor.
 GeometricPrimitive::Impl::SharedResources::SharedResources(_In_ ID3D11DeviceContext* deviceContext)
-    : deviceContext(deviceContext)
+    : mDeviceContext(deviceContext)
 {
     ComPtr<ID3D11Device> device;
     deviceContext->GetDevice(&device);
@@ -143,10 +93,18 @@ GeometricPrimitive::Impl::SharedResources::SharedResources(_In_ ID3D11DeviceCont
 
     // Create input layouts.
     effect->SetTextureEnabled(true);
-    ::CreateInputLayout(device.Get(), effect.get(), &inputLayoutTextured);
+    ThrowIfFailed(
+        CreateInputLayoutFromEffect<VertexType>(device.Get(), effect.get(), &inputLayoutTextured)
+    );
+
+    SetDebugObjectName(inputLayoutTextured.Get(), "DirectXTK:GeometricPrimitive");
 
     effect->SetTextureEnabled(false);
-    ::CreateInputLayout(device.Get(), effect.get(), &inputLayoutUntextured);
+    ThrowIfFailed(
+        CreateInputLayoutFromEffect<VertexType>(device.Get(), effect.get(), &inputLayoutUntextured)
+    );
+
+    SetDebugObjectName(inputLayoutUntextured.Get(), "DirectXTK:GeometricPrimitive");
 }
 
 
@@ -170,18 +128,18 @@ void GeometricPrimitive::Impl::SharedResources::PrepareForRendering(bool alpha, 
         depthStencilState = stateObjects->DepthDefault();
     }
 
-    deviceContext->OMSetBlendState(blendState, nullptr, 0xFFFFFFFF);
-    deviceContext->OMSetDepthStencilState(depthStencilState, 0);
+    mDeviceContext->OMSetBlendState(blendState, nullptr, 0xFFFFFFFF);
+    mDeviceContext->OMSetDepthStencilState(depthStencilState, 0);
 
     // Set the rasterizer state.
     if (wireframe)
-        deviceContext->RSSetState(stateObjects->Wireframe());
+        mDeviceContext->RSSetState(stateObjects->Wireframe());
     else
-        deviceContext->RSSetState(stateObjects->CullCounterClockwise());
+        mDeviceContext->RSSetState(stateObjects->CullCounterClockwise());
 
     ID3D11SamplerState* samplerState = stateObjects->LinearWrap();
 
-    deviceContext->PSSetSamplers(0, 1, &samplerState);
+    mDeviceContext->PSSetSamplers(0, 1, &samplerState);
 }
 
 
@@ -200,8 +158,16 @@ void GeometricPrimitive::Impl::Initialize(ID3D11DeviceContext* deviceContext, co
     ComPtr<ID3D11Device> device;
     deviceContext->GetDevice(&device);
 
-    CreateBuffer(device.Get(), vertices, D3D11_BIND_VERTEX_BUFFER, &mVertexBuffer);
-    CreateBuffer(device.Get(), indices, D3D11_BIND_INDEX_BUFFER, &mIndexBuffer);
+    ThrowIfFailed(
+        CreateStaticBuffer(device.Get(), vertices, D3D11_BIND_VERTEX_BUFFER, mVertexBuffer.ReleaseAndGetAddressOf())
+    );
+
+    ThrowIfFailed(
+        CreateStaticBuffer(device.Get(), indices, D3D11_BIND_INDEX_BUFFER, mIndexBuffer.ReleaseAndGetAddressOf())
+    );
+
+    SetDebugObjectName(mVertexBuffer.Get(), "DirectXTK:GeometricPrimitive");
+    SetDebugObjectName(mIndexBuffer.Get(), "DirectXTK:GeometricPrimitive");
 
     mIndexCount = static_cast<UINT>(indices.size());
 }
@@ -257,7 +223,7 @@ void GeometricPrimitive::Impl::Draw(
     std::function<void()>& setCustomState) const
 {
     assert(mResources);
-    auto deviceContext = mResources->deviceContext.Get();
+    auto deviceContext = mResources->mDeviceContext.Get();
     assert(deviceContext != nullptr);
 
     // Set state objects.
@@ -301,13 +267,20 @@ void GeometricPrimitive::Impl::CreateInputLayout(IEffect* effect, ID3D11InputLay
     assert(inputLayout != nullptr);
 
     assert(mResources);
-    auto deviceContext = mResources->deviceContext.Get();
+    auto deviceContext = mResources->mDeviceContext.Get();
     assert(deviceContext != nullptr);
 
     ComPtr<ID3D11Device> device;
     deviceContext->GetDevice(&device);
 
-    ::CreateInputLayout(device.Get(), effect, inputLayout);
+    ThrowIfFailed(
+        CreateInputLayoutFromEffect<VertexType>(device.Get(), effect, inputLayout)
+    );
+
+    assert(inputLayout != nullptr && *inputLayout != nullptr);
+    _Analysis_assume_(inputLayout != nullptr && *inputLayout != nullptr);
+
+    SetDebugObjectName(*inputLayout, "DirectXTK:GeometricPrimitive");
 }
 
 

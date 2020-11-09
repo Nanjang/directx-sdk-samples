@@ -9,14 +9,11 @@
 
 #include "pch.h"
 #include "Model.h"
-
+#include "DirectXHelpers.h"
 #include "Effects.h"
 #include "VertexTypes.h"
-
-#include "DirectXHelpers.h"
-#include "PlatformHelpers.h"
 #include "BinaryReader.h"
-
+#include "PlatformHelpers.h"
 #include "SDKMesh.h"
 
 using namespace DirectX;
@@ -24,7 +21,7 @@ using Microsoft::WRL::ComPtr;
 
 namespace
 {
-    enum
+    enum : unsigned int
     {
         PER_VERTEX_COLOR        = 0x1,
         SKINNING                = 0x2,
@@ -42,10 +39,28 @@ namespace
         MaterialRecordSDKMESH() noexcept : alpha(false) {}
     };
 
+    inline XMFLOAT3 GetMaterialColor(float r, float g, float b, bool srgb)
+    {
+        if (srgb)
+        {
+            XMVECTOR v = XMVectorSet(r, g, b, 1.f);
+            v = XMColorSRGBToRGB(v);
+
+            XMFLOAT3 result;
+            XMStoreFloat3(&result, v);
+            return result;
+        }
+        else
+        {
+            return XMFLOAT3(r, g, b);
+        }
+    }
+
     void LoadMaterial(const DXUT::SDKMESH_MATERIAL& mh,
-                      unsigned int flags,
-                      IEffectFactory& fxFactory,
-                      MaterialRecordSDKMESH& m)
+        unsigned int flags,
+        IEffectFactory& fxFactory,
+        MaterialRecordSDKMESH& m,
+        bool srgb)
     {
         wchar_t matName[DXUT::MAX_MATERIAL_NAME] = {};
         MultiByteToWideChar(CP_UTF8, 0, mh.Name, -1, matName, DXUT::MAX_MATERIAL_NAME);
@@ -62,14 +77,14 @@ namespace
         if (flags & DUAL_TEXTURE && !mh.SpecularTexture[0])
         {
             DebugTrace("WARNING: Material '%s' has multiple texture coords but not multiple textures\n", mh.Name);
-            flags &= ~DUAL_TEXTURE;
+            flags &= ~static_cast<unsigned int>(DUAL_TEXTURE);
         }
 
         if (flags & NORMAL_MAPS)
         {
             if (!mh.NormalTexture[0])
             {
-                flags &= ~NORMAL_MAPS;
+                flags &= ~static_cast<unsigned int>(NORMAL_MAPS);
                 *normalName = 0;
             }
         }
@@ -96,9 +111,9 @@ namespace
         }
         else
         {
-            info.ambientColor = XMFLOAT3(mh.Ambient.x, mh.Ambient.y, mh.Ambient.z);
-            info.diffuseColor = XMFLOAT3(mh.Diffuse.x, mh.Diffuse.y, mh.Diffuse.z);
-            info.emissiveColor = XMFLOAT3(mh.Emissive.x, mh.Emissive.y, mh.Emissive.z);
+            info.ambientColor = GetMaterialColor(mh.Ambient.x, mh.Ambient.y, mh.Ambient.z, srgb);
+            info.diffuseColor = GetMaterialColor(mh.Diffuse.x, mh.Diffuse.y, mh.Diffuse.z, srgb);
+            info.emissiveColor = GetMaterialColor(mh.Emissive.x, mh.Emissive.y, mh.Emissive.z, srgb);
 
             if (mh.Diffuse.w != 1.f && mh.Diffuse.w != 0.f)
             {
@@ -117,6 +132,44 @@ namespace
         info.diffuseTexture = diffuseName;
         info.specularTexture = specularName;
         info.normalTexture = normalName;
+
+        m.effect = fxFactory.CreateEffect(info, nullptr);
+        m.alpha = (info.alpha < 1.f);
+    }
+
+    void LoadMaterial(const DXUT::SDKMESH_MATERIAL_V2& mh,
+        unsigned int flags,
+        IEffectFactory& fxFactory,
+        MaterialRecordSDKMESH& m)
+    {
+        wchar_t matName[DXUT::MAX_MATERIAL_NAME] = {};
+        MultiByteToWideChar(CP_UTF8, 0, mh.Name, -1, matName, DXUT::MAX_MATERIAL_NAME);
+
+        wchar_t albetoTexture[DXUT::MAX_TEXTURE_NAME] = {};
+        MultiByteToWideChar(CP_UTF8, 0, mh.AlbetoTexture, -1, albetoTexture, DXUT::MAX_TEXTURE_NAME);
+
+        wchar_t normalName[DXUT::MAX_TEXTURE_NAME] = {};
+        MultiByteToWideChar(CP_UTF8, 0, mh.NormalTexture, -1, normalName, DXUT::MAX_TEXTURE_NAME);
+
+        wchar_t rmaName[DXUT::MAX_TEXTURE_NAME] = {};
+        MultiByteToWideChar(CP_UTF8, 0, mh.RMATexture, -1, rmaName, DXUT::MAX_TEXTURE_NAME);
+
+        wchar_t emissiveName[DXUT::MAX_TEXTURE_NAME] = {};
+        MultiByteToWideChar(CP_UTF8, 0, mh.EmissiveTexture, -1, emissiveName, DXUT::MAX_TEXTURE_NAME);
+
+        EffectFactory::EffectInfo info;
+        info.name = matName;
+        info.perVertexColor = false;
+        info.enableSkinning = false;
+        info.enableDualTexture = false;
+        info.enableNormalMaps = true;
+        info.biasedVertexNormals = (flags & BIASED_VERTEX_NORMALS) != 0;
+        info.alpha = (mh.Alpha == 0.f) ? 1.f : mh.Alpha;
+
+        info.diffuseTexture = albetoTexture;
+        info.specularTexture = rmaName;
+        info.normalTexture = normalName;
+        info.emissiveTexture = emissiveName;
 
         m.effect = fxFactory.CreateEffect(info, nullptr);
         m.alpha = (info.alpha < 1.f);
@@ -308,26 +361,6 @@ namespace
 
         return flags;
     }
-
-    // Helper for creating a D3D input layout.
-    void CreateInputLayout(_In_ ID3D11Device* device, _In_ IEffect* effect, std::vector<D3D11_INPUT_ELEMENT_DESC>& inputDesc, _Out_ ID3D11InputLayout** pInputLayout)
-    {
-        void const* shaderByteCode;
-        size_t byteCodeLength;
-
-        effect->GetVertexShaderBytecode(&shaderByteCode, &byteCodeLength);
-
-        ThrowIfFailed(
-            device->CreateInputLayout(inputDesc.data(),
-            static_cast<UINT>(inputDesc.size()),
-            shaderByteCode, byteCodeLength,
-            pInputLayout)
-        );
-
-        _Analysis_assume_(*pInputLayout != 0);
-
-        SetDebugObjectName(*pInputLayout, "ModelSDKMESH");
-    }
 }
 
 
@@ -336,10 +369,17 @@ namespace
 //======================================================================================
 
 _Use_decl_annotations_
-std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice, const uint8_t* meshData, size_t dataSize, IEffectFactory& fxFactory, bool ccw, bool pmalpha)
+std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(
+    ID3D11Device* d3dDevice,
+    const uint8_t* meshData,
+    size_t idataSize,
+    IEffectFactory& fxFactory,
+    ModelLoaderFlags flags)
 {
     if (!d3dDevice || !meshData)
         throw std::exception("Device and meshData cannot be null");
+
+    uint64_t dataSize = idataSize;
 
     // File Headers
     if (dataSize < sizeof(DXUT::SDKMESH_HEADER))
@@ -355,7 +395,7 @@ std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice
     if (dataSize < header->HeaderSize)
         throw std::exception("End of file");
 
-    if (header->Version != DXUT::SDKMESH_FILE_VERSION)
+    if (header->Version != DXUT::SDKMESH_FILE_VERSION && header->Version != DXUT::SDKMESH_FILE_VERSION_V2)
         throw std::exception("Not a supported SDKMESH version");
 
     if (header->IsBigEndian)
@@ -405,7 +445,17 @@ std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice
     if (dataSize < header->MaterialDataOffset
         || (dataSize < (header->MaterialDataOffset + uint64_t(header->NumMaterials) * sizeof(DXUT::SDKMESH_MATERIAL))))
         throw std::exception("End of file");
-    auto materialArray = reinterpret_cast<const DXUT::SDKMESH_MATERIAL*>(meshData + header->MaterialDataOffset);
+
+    const DXUT::SDKMESH_MATERIAL* materialArray = nullptr;
+    const DXUT::SDKMESH_MATERIAL_V2* materialArray_v2 = nullptr;
+    if (header->Version == DXUT::SDKMESH_FILE_VERSION_V2)
+    {
+        materialArray_v2 = reinterpret_cast<const DXUT::SDKMESH_MATERIAL_V2*>(meshData + header->MaterialDataOffset);
+    }
+    else
+    {
+        materialArray = reinterpret_cast<const DXUT::SDKMESH_MATERIAL*>(meshData + header->MaterialDataOffset);
+    }
 
     // Buffer data
     uint64_t bufferDataOffset = header->HeaderSize + header->NonBufferDataSize;
@@ -429,31 +479,37 @@ std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice
     {
         auto& vh = vbArray[j];
 
-        if (vh.SizeBytes > (D3D11_REQ_RESOURCE_SIZE_IN_MEGABYTES_EXPRESSION_A_TERM * 1024u * 1024u))
-            throw std::exception("VB too large for DirectX 11");
+        if (vh.SizeBytes > UINT32_MAX)
+            throw std::exception("VB too large");
+
+        if (!(flags & ModelLoader_AllowLargeModels))
+        {
+            if (vh.SizeBytes > (D3D11_REQ_RESOURCE_SIZE_IN_MEGABYTES_EXPRESSION_A_TERM * 1024u * 1024u))
+                throw std::exception("VB too large for DirectX 11");
+        }
 
         if (dataSize < vh.DataOffset
             || (dataSize < vh.DataOffset + vh.SizeBytes))
             throw std::exception("End of file");
 
         vbDecls[j] = std::make_shared<std::vector<D3D11_INPUT_ELEMENT_DESC>>();
-        unsigned int flags = GetInputLayoutDesc(vh.Decl, *vbDecls[j].get());
+        unsigned int ilflags = GetInputLayoutDesc(vh.Decl, *vbDecls[j].get());
 
-        if (flags & SKINNING)
+        if (ilflags & SKINNING)
         {
-            flags &= ~(DUAL_TEXTURE | NORMAL_MAPS);
+            ilflags &= ~static_cast<unsigned int>(DUAL_TEXTURE | NORMAL_MAPS);
         }
-        if (flags & DUAL_TEXTURE)
+        if (ilflags & DUAL_TEXTURE)
         {
-            flags &= ~NORMAL_MAPS;
+            ilflags &= ~static_cast<unsigned int>(NORMAL_MAPS);
         }
 
-        if (flags & USES_OBSOLETE_DEC3N)
+        if (ilflags & USES_OBSOLETE_DEC3N)
         {
             dec3nwarning = true;
         }
 
-        materialFlags[j] = flags;
+        materialFlags[j] = ilflags;
 
         auto verts = bufferData + (vh.DataOffset - bufferDataOffset);
 
@@ -462,8 +518,7 @@ std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice
         desc.ByteWidth = static_cast<UINT>(vh.SizeBytes);
         desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 
-        D3D11_SUBRESOURCE_DATA initData = {};
-        initData.pSysMem = verts;
+        D3D11_SUBRESOURCE_DATA initData = { verts, 0, 0 };
 
         ThrowIfFailed(
             d3dDevice->CreateBuffer(&desc, &initData, &vbs[j])
@@ -486,8 +541,14 @@ std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice
     {
         auto& ih = ibArray[j];
 
-        if (ih.SizeBytes > (D3D11_REQ_RESOURCE_SIZE_IN_MEGABYTES_EXPRESSION_A_TERM * 1024u * 1024u))
-            throw std::exception("IB too large for DirectX 11");
+        if (ih.SizeBytes > UINT32_MAX)
+            throw std::exception("IB too large");
+
+        if (!(flags & ModelLoader_AllowLargeModels))
+        {
+            if (ih.SizeBytes > (D3D11_REQ_RESOURCE_SIZE_IN_MEGABYTES_EXPRESSION_A_TERM * 1024u * 1024u))
+                throw std::exception("IB too large for DirectX 11");
+        }
 
         if (dataSize < ih.DataOffset
             || (dataSize < ih.DataOffset + ih.SizeBytes))
@@ -503,8 +564,7 @@ std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice
         desc.ByteWidth = static_cast<UINT>(ih.SizeBytes);
         desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 
-        D3D11_SUBRESOURCE_DATA initData = {};
-        initData.pSysMem = indices;
+        D3D11_SUBRESOURCE_DATA initData = { indices, 0, 0 };
 
         ThrowIfFailed(
             d3dDevice->CreateBuffer(&desc, &initData, &ibs[j])
@@ -517,7 +577,7 @@ std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice
     std::vector<MaterialRecordSDKMESH> materials;
     materials.resize(header->NumMaterials);
 
-    std::unique_ptr<Model> model(new Model());
+    auto model = std::make_unique<Model>();
     model->meshes.reserve(header->NumMeshes);
 
     for (UINT meshIndex = 0; meshIndex < header->NumMeshes; ++meshIndex)
@@ -551,8 +611,8 @@ std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice
         wchar_t meshName[DXUT::MAX_MESH_NAME] = {};
         MultiByteToWideChar(CP_UTF8, 0, mh.Name, -1, meshName, DXUT::MAX_MESH_NAME);
         mesh->name = meshName;
-        mesh->ccw = ccw;
-        mesh->pmalpha = pmalpha;
+        mesh->ccw = (flags & ModelLoader_CounterClockwise) != 0;
+        mesh->pmalpha = (flags & ModelLoader_PremultipledAlpha) != 0;
 
         // Extents
         mesh->boundingBox.Center = mh.BoundingBoxCenter;
@@ -598,22 +658,40 @@ std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice
             if (!mat.effect)
             {
                 size_t vi = mh.VertexBuffers[0];
-                LoadMaterial(
-                    materialArray[subset.MaterialID],
-                    materialFlags[vi],
-                    fxFactory,
-                    mat);
+
+                if (materialArray_v2)
+                {
+                    LoadMaterial(
+                        materialArray_v2[subset.MaterialID],
+                        materialFlags[vi],
+                        fxFactory,
+                        mat);
+                }
+                else
+                {
+                    LoadMaterial(
+                        materialArray[subset.MaterialID],
+                        materialFlags[vi],
+                        fxFactory,
+                        mat,
+                        (flags & ModelLoader_MaterialColorsSRGB) != 0);
+                }
             }
 
             ComPtr<ID3D11InputLayout> il;
-            CreateInputLayout(d3dDevice, mat.effect.get(), *vbDecls[mh.VertexBuffers[0]].get(), &il);
+            ThrowIfFailed(
+                CreateInputLayoutFromEffect(d3dDevice, mat.effect.get(),
+                    vbDecls[mh.VertexBuffers[0]]->data(), vbDecls[mh.VertexBuffers[0]]->size(), il.GetAddressOf())
+            );
+
+            SetDebugObjectName(il.Get(), "ModelSDKMESH");
 
             auto part = new ModelMeshPart();
             part->isAlpha = mat.alpha;
 
             part->indexCount = static_cast<uint32_t>(subset.IndexCount);
             part->startIndex = static_cast<uint32_t>(subset.IndexStart);
-            part->vertexOffset = static_cast<uint32_t>(subset.VertexStart);
+            part->vertexOffset = static_cast<int32_t>(subset.VertexStart);
             part->vertexStride = static_cast<uint32_t>(vbArray[mh.VertexBuffers[0]].StrideBytes);
             part->indexFormat = (ibArray[mh.IndexBuffer].IndexType == DXUT::IT_32BIT) ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT;
             part->primitiveType = primType;
@@ -635,18 +713,23 @@ std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice
 
 //--------------------------------------------------------------------------------------
 _Use_decl_annotations_
-std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(ID3D11Device* d3dDevice, const wchar_t* szFileName, IEffectFactory& fxFactory, bool ccw, bool pmalpha)
+std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH(
+    ID3D11Device* device,
+    const wchar_t* szFileName,
+    IEffectFactory& fxFactory,
+    ModelLoaderFlags flags)
 {
     size_t dataSize = 0;
     std::unique_ptr<uint8_t[]> data;
     HRESULT hr = BinaryReader::ReadEntireFile(szFileName, data, &dataSize);
     if (FAILED(hr))
     {
-        DebugTrace("ERROR: CreateFromSDKMESH failed (%08X) loading '%ls'\n", hr, szFileName);
+        DebugTrace("ERROR: CreateFromSDKMESH failed (%08X) loading '%ls'\n",
+            static_cast<unsigned int>(hr), szFileName);
         throw std::exception("CreateFromSDKMESH");
     }
 
-    auto model = CreateFromSDKMESH(d3dDevice, data.get(), dataSize, fxFactory, ccw, pmalpha);
+    auto model = CreateFromSDKMESH(device, data.get(), dataSize, fxFactory, flags);
 
     model->name = szFileName;
 

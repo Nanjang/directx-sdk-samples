@@ -46,9 +46,9 @@ struct EnvironmentMapEffectTraits
 {
     using ConstantBufferType = EnvironmentMapEffectConstants;
 
-    static const int VertexShaderCount = 10;
-    static const int PixelShaderCount = 8;
-    static const int ShaderPermutationCount = 40;
+    static constexpr int VertexShaderCount = 10;
+    static constexpr int PixelShaderCount = 8;
+    static constexpr int ShaderPermutationCount = 40;
 };
 
 
@@ -67,7 +67,7 @@ public:
 
     ComPtr<ID3D11ShaderResourceView> environmentMap;
 
-    int GetCurrentShaderPermutation() const;
+    int GetCurrentShaderPermutation() const noexcept;
 
     void Apply(_In_ ID3D11DeviceContext* deviceContext);
 };
@@ -257,7 +257,7 @@ const int EffectBase<EnvironmentMapEffectTraits>::PixelShaderIndices[] =
 
 // Global pool of per-device EnvironmentMapEffect resources.
 template<>
-SharedResourcePool<ID3D11Device*, EffectBase<EnvironmentMapEffectTraits>::DeviceResources> EffectBase<EnvironmentMapEffectTraits>::deviceResourcesPool;
+SharedResourcePool<ID3D11Device*, EffectBase<EnvironmentMapEffectTraits>::DeviceResources> EffectBase<EnvironmentMapEffectTraits>::deviceResourcesPool = {};
 
 
 // Constructor.
@@ -282,7 +282,7 @@ EnvironmentMapEffect::Impl::Impl(_In_ ID3D11Device* device)
 }
 
 
-int EnvironmentMapEffect::Impl::GetCurrentShaderPermutation() const
+int EnvironmentMapEffect::Impl::GetCurrentShaderPermutation() const noexcept
 {
     int permutation = 0;
 

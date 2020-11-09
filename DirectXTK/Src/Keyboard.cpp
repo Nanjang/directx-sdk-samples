@@ -1,4 +1,4 @@
-﻿//--------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------
 // File: Keyboard.cpp
 //
 // Copyright (c) Microsoft Corporation. All rights reserved.
@@ -20,7 +20,7 @@ static_assert(sizeof(Keyboard::State) == (256 / 8), "Size mismatch for State");
 
 namespace
 {
-    void KeyDown(int key, Keyboard::State& state)
+    void KeyDown(int key, Keyboard::State& state) noexcept
     {
         if (key < 0 || key > 0xfe)
             return;
@@ -31,7 +31,7 @@ namespace
         ptr[(key >> 5)] |= bf;
     }
 
-    void KeyUp(int key, Keyboard::State& state)
+    void KeyUp(int key, Keyboard::State& state) noexcept
     {
         if (key < 0 || key > 0xfe)
             return;
@@ -88,6 +88,12 @@ public:
         s_keyboard = this;
     }
 
+    Impl(Impl&&) = default;
+    Impl& operator= (Impl&&) = default;
+
+    Impl(Impl const&) = delete;
+    Impl& operator= (Impl const&) = delete;
+
     ~Impl()
     {
         s_keyboard = nullptr;
@@ -98,7 +104,7 @@ public:
         memcpy(&state, &mState, sizeof(State));
     }
 
-    void Reset()
+    void Reset() noexcept
     {
         memset(&mState, 0, sizeof(State));
     }
@@ -150,7 +156,9 @@ void Keyboard::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam)
     switch (vk)
     {
         case VK_SHIFT:
-            vk = MapVirtualKey((lParam & 0x00ff0000) >> 16, MAPVK_VSC_TO_VK_EX);
+            vk = static_cast<int>(
+                MapVirtualKey((static_cast<UINT>(lParam) & 0x00ff0000) >> 16u,
+                    MAPVK_VSC_TO_VK_EX));
             if (!down)
             {
                 // Workaround to ensure left vs. right shift get cleared when both were pressed at same time
@@ -160,11 +168,11 @@ void Keyboard::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam)
             break;
 
         case VK_CONTROL:
-            vk = (lParam & 0x01000000) ? VK_RCONTROL : VK_LCONTROL;
+            vk = (static_cast<UINT>(lParam) & 0x01000000) ? VK_RCONTROL : VK_LCONTROL;
             break;
 
         case VK_MENU:
-            vk = (lParam & 0x01000000) ? VK_RMENU : VK_LMENU;
+            vk = (static_cast<UINT>(lParam) & 0x01000000) ? VK_RMENU : VK_LMENU;
             break;
     }
 
@@ -224,7 +232,7 @@ public:
         memcpy(&state, &mState, sizeof(State));
     }
 
-    void Reset()
+    void Reset() noexcept
     {
         memset(&mState, 0, sizeof(State));
     }
@@ -453,7 +461,7 @@ Keyboard::State Keyboard::GetState() const
 }
 
 
-void Keyboard::Reset()
+void Keyboard::Reset() noexcept
 {
     pImpl->Reset();
 }
@@ -478,7 +486,7 @@ Keyboard& Keyboard::Get()
 // KeyboardStateTracker
 //======================================================================================
 
-void Keyboard::KeyboardStateTracker::Update(const State& state)
+void Keyboard::KeyboardStateTracker::Update(const State& state) noexcept
 {
     auto currPtr = reinterpret_cast<const uint32_t*>(&state);
     auto prevPtr = reinterpret_cast<const uint32_t*>(&lastState);

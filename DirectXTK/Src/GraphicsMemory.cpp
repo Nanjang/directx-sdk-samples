@@ -56,7 +56,7 @@ public:
         s_graphicsMemory = nullptr;
     }
 
-    void Initialize(_In_ ID3D11DeviceX* device, UINT backBufferCount)
+    void Initialize(_In_ ID3D11DeviceX* device, unsigned int backBufferCount)
     {
         assert(device != nullptr);
         mDevice = device;
@@ -228,18 +228,24 @@ public:
         s_graphicsMemory = this;
     }
 
+    Impl(Impl&&) = default;
+    Impl& operator= (Impl&&) = default;
+
+    Impl(Impl const&) = delete;
+    Impl& operator= (Impl const&) = delete;
+
     ~Impl()
     {
         s_graphicsMemory = nullptr;
     }
 
-    void Initialize(_In_ ID3D11Device* device, UINT backBufferCount)
+    void Initialize(_In_ ID3D11Device* device, unsigned int backBufferCount) noexcept
     {
         UNREFERENCED_PARAMETER(device);
         UNREFERENCED_PARAMETER(backBufferCount);
     }
 
-    void* Allocate(_In_opt_ ID3D11DeviceContext* context, size_t size, int alignment)
+    void* Allocate(_In_opt_ ID3D11DeviceContext* context, size_t size, int alignment) noexcept
     {
         UNREFERENCED_PARAMETER(context);
         UNREFERENCED_PARAMETER(size);
@@ -247,7 +253,7 @@ public:
         return nullptr;
     }
 
-    void Commit()
+    void Commit() noexcept
     {
     }
 
@@ -267,9 +273,9 @@ GraphicsMemory::Impl* GraphicsMemory::Impl::s_graphicsMemory = nullptr;
 
 // Public constructor.
 #if defined(_XBOX_ONE) && defined(_TITLE)
-GraphicsMemory::GraphicsMemory(_In_ ID3D11DeviceX* device, UINT backBufferCount)
+GraphicsMemory::GraphicsMemory(_In_ ID3D11DeviceX* device, unsigned int backBufferCount)
 #else
-GraphicsMemory::GraphicsMemory(_In_ ID3D11Device* device, UINT backBufferCount)
+GraphicsMemory::GraphicsMemory(_In_ ID3D11Device* device, unsigned int backBufferCount)
 #endif
     : pImpl(std::make_unique<Impl>(this))
 {
